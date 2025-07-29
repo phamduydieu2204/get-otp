@@ -312,7 +312,7 @@ API Call: getOtpCheck ──────> Heroku Proxy ──────> Backe
 
 ### Cơ chế xử lý khi người dùng click 2 lần liên tiếp
 
-Hệ thống có **3 lớp bảo vệ** để ngăn chặn việc click nhiều lần:
+Hệ thống có **4 lớp bảo vệ** để ngăn chặn việc click nhiều lần:
 
 #### 1. **Biến trạng thái `isProcessing`**
 - **Vị trí**: Dòng 8, 41-46, 56, 65-66 trong `otp.js`
@@ -329,39 +329,56 @@ Hệ thống có **3 lớp bảo vệ** để ngăn chặn việc click nhiều 
   - Nếu < 5 giây: Hiển thị thông báo với số giây còn lại phải chờ
   - Delay có thể cấu hình: `RATE_LIMIT_DELAY = 5000` (5 giây)
 
-#### 3. **Disable nút bấm**
-- **Vị trí**: Dòng 58-59, 66-67 trong `otp.js`
+#### 3. **Disable nút bấm ngay lập tức**
+- **Vị trí**: Dòng 49-52 trong `otp.js` (đã được cập nhật)
 - **Hoạt động**:
-  - Khi bắt đầu: `btn.disabled = true` và đổi text thành "⏳ Đang xử lý..."
-  - Khi hoàn tất: `btn.disabled = false` và đổi lại text "Lấy OTP"
+  - **NGAY KHI CLICK**: `btn.disabled = true` và đổi text thành "⏳ Đang xử lý..."
+  - Thêm class `processing` cho visual feedback
+  - Khi hoàn tất: Gọi `resetButton()` để khôi phục trạng thái
+
+#### 4. **Visual feedback với CSS animation**
+- **Vị trí**: Dòng 59-86 trong `style.css`
+- **Hoạt động**:
+  - Class `processing`: Nền màu cam (`#f57c00`) với animation pulse
+  - Animation tạo hiệu ứng nhấp nháy để user biết đang xử lý
+  - Mobile-optimized với `min-height: 48px` để dễ bấm
 
 ### Luồng xử lý chi tiết
 
 ```
 Click lần 1:
+├─ NGAY LẬP TỨC: Disable button + text "⏳ Đang xử lý..." + class 'processing'
 ├─ Kiểm tra isProcessing (false) → Tiếp tục
 ├─ Kiểm tra rate limit (OK) → Tiếp tục  
 ├─ Set isProcessing = true
 ├─ Set lastRequestTime = now
-├─ Disable button
-├─ Xử lý request...
-└─ Reset trạng thái khi xong
+├─ Xử lý request (check → wait nếu cần → final OTP)...
+└─ Gọi resetButton() khi có kết quả (thành công/lỗi)
 
-Click lần 2 (ngay lập tức):
-├─ Kiểm tra isProcessing (true) → DỪNG
-└─ Hiển thị: "Đang xử lý yêu cầu trước đó..."
+Click lần 2 (khi đang processing):
+├─ Button đã bị disabled → Không thể click
+├─ Nếu vẫn bypass được: Kiểm tra isProcessing (true) → DỪNG
+├─ Hiển thị: "Đang xử lý yêu cầu trước đó..."
+└─ resetButton() để khôi phục
 
 Click lần 2 (sau khi xử lý xong nhưng < 5s):
+├─ NGAY LẬP TỨC: Disable button + visual feedback
 ├─ Kiểm tra isProcessing (false) → Tiếp tục
 ├─ Kiểm tra rate limit (FAIL) → DỪNG
-└─ Hiển thị: "Vui lòng đợi X giây trước khi thử lại"
+├─ Hiển thị: "Vui lòng đợi X giây trước khi thử lại"
+└─ resetButton() để khôi phục
 ```
 
 ### Ưu điểm của thiết kế này
-1. **Bảo vệ đa lớp**: 3 cơ chế độc lập đảm bảo không có request trùng lặp
-2. **UX tốt**: Người dùng được thông báo rõ ràng về trạng thái và thời gian chờ
-3. **Tránh lỗi backend**: Ngăn chặn việc gửi nhiều request cùng lúc
-4. **Linh hoạt**: Có thể điều chỉnh thời gian rate limit
+1. **Bảo vệ đa lớp**: 4 cơ chế độc lập đảm bảo không có request trùng lặp
+2. **UX xuất sắc**: 
+   - Phản hồi ngay lập tức khi click (disable + visual feedback)
+   - Animation pulse cho biết đang xử lý
+   - Thông báo rõ ràng về trạng thái và thời gian chờ
+3. **Mobile-friendly**: Nút đủ lớn (48px) và visual feedback rõ ràng
+4. **Tránh lỗi backend**: Ngăn chặn việc gửi nhiều request cùng lúc
+5. **Code maintainable**: Hàm `resetButton()` tập trung việc reset trạng thái
+6. **Linh hoạt**: Có thể điều chỉnh thời gian rate limit và style
 
 ## Maintenance Notes
 
@@ -371,3 +388,5 @@ Click lần 2 (sau khi xử lý xong nhưng < 5s):
 4. **Styling Changes**: All styles centralized in `style.css`
 5. **API Changes**: Update request format in `otp.js`
 6. **Adjusting Rate Limit**: Change `RATE_LIMIT_DELAY` value in `otp.js`
+7. **Customizing Button Animation**: Modify `.processing` class and `@keyframes pulse` in `style.css`
+8. **Button State Management**: All button resets now go through `resetButton()` function
