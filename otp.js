@@ -1,5 +1,5 @@
-import { getConstants } from './constants.js';
-import { MessageRenderer } from './messageRenderer.js';
+import { getConstants } from './constants.js?v=202507290338';
+import { MessageRenderer } from './messageRenderer.js?v=202507290338';
 
 let otpCountdown = null;
 let otpValidityCountdown = null;

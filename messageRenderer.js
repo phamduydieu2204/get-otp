@@ -1,5 +1,5 @@
 // 🎨 MESSAGE RENDERER - Render đẹp mắt cho từng template
-import { MESSAGE_TEMPLATES } from './messageTemplates.js';
+import { MESSAGE_TEMPLATES } from './messageTemplates.js?v=202507290338';
 
 export class MessageRenderer {
   constructor(container) {
