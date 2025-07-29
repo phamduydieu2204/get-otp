@@ -127,6 +127,98 @@ export const MESSAGE_TEMPLATES = {
     ]
   },
 
+  // 🌐 NETWORK ERRORS - Chi tiết hóa lỗi kết nối
+  NETWORK_ERROR: {
+    type: 'error',
+    icon: '🌐',
+    title: 'Lỗi kết nối mạng',
+    content: 'Không thể kết nối tới server. Vui lòng kiểm tra kết nối internet của bạn.',
+    suggestions: [
+      'Kiểm tra kết nối WiFi/4G/5G',
+      'Thử tắt và bật lại mạng',
+      'Đổi sang mạng khác nếu có thể'
+    ],
+    note: 'Đây thường là vấn đề từ phía mạng internet của bạn',
+    actions: [
+      {
+        text: 'Thử lại ngay',
+        link: 'javascript:void(0)',
+        type: 'retry'
+      },
+      {
+        text: 'Chẩn đoán mạng',
+        link: 'javascript:void(0)',
+        type: 'diagnostic',
+        action: 'runNetworkDiagnostic'
+      }
+    ]
+  },
+
+  TIMEOUT_ERROR: {
+    type: 'warning',
+    icon: '⏱️',
+    title: 'Hết thời gian chờ',
+    content: 'Yêu cầu mất quá nhiều thời gian để xử lý. Server có thể đang quá tải.',
+    suggestions: [
+      'Thử lại sau 30 giây',
+      'Kiểm tra tốc độ mạng',
+      'Đổi sang mạng nhanh hơn nếu có thể'
+    ],
+    note: 'Timeout thường xảy ra khi server đang xử lý nhiều yêu cầu cùng lúc',
+    actions: [
+      {
+        text: 'Thử lại sau 30s',
+        link: 'javascript:void(0)',
+        type: 'retry-delayed'
+      }
+    ]
+  },
+
+  SERVER_OVERLOAD: {
+    type: 'warning',
+    icon: '🔥',
+    title: 'Server đang quá tải',
+    content: 'Server đang xử lý quá nhiều yêu cầu. Vui lòng thử lại sau ít phút.',
+    suggestions: [
+      'Đợi 2-3 phút rồi thử lại',
+      'Tránh spam click liên tục',
+      'Thử lại vào lúc ít người dùng hơn'
+    ],
+    note: 'Giờ cao điểm (8-10h, 14-16h, 20-22h) thường có nhiều người dùng',
+    actions: [
+      {
+        text: 'Thử lại sau 2 phút',
+        link: 'javascript:void(0)',
+        type: 'retry-delayed'
+      }
+    ]
+  },
+
+  QUOTA_EXCEEDED: {
+    type: 'error',
+    icon: '📊',
+    title: 'Đã vượt quá giới hạn sử dụng',
+    content: 'Hệ thống đã đạt giới hạn xử lý hàng ngày. Vui lòng thử lại vào ngày mai.',
+    suggestions: [
+      'Thử lại sau 00:00 (đêm nay)',
+      'Liên hệ hỗ trợ để được tư vấn',
+      'Nâng cấp gói dịch vụ để tăng quota'
+    ],
+    note: 'Quota được reset vào 00:00 GMT+7 hàng ngày',
+    actions: [
+      {
+        text: '📘 Facebook',
+        link: 'https://www.facebook.com/vidieuvn.muatoolAmazon',
+        type: 'facebook'
+      },
+      {
+        text: '📱 Zalo',
+        link: 'https://zalo.me/0815282286',
+        type: 'zalo'
+      }
+    ]
+  },
+
   // ✅ SUCCESS
   CHECK_SUCCESS: {
     type: 'success',
@@ -181,8 +273,61 @@ export const ERROR_CODES = {
   'ACCOUNT_NOT_FOUND': 'ACCOUNT_NOT_FOUND',
   'EMAIL_OTP_NOT_FOUND': 'EMAIL_OTP_NOT_FOUND',
   'SYSTEM_ERROR': 'SYSTEM_ERROR',
+  'NETWORK_ERROR': 'NETWORK_ERROR',
+  'TIMEOUT_ERROR': 'TIMEOUT_ERROR',
+  'SERVER_OVERLOAD': 'SERVER_OVERLOAD',
+  'QUOTA_EXCEEDED': 'QUOTA_EXCEEDED',
   'CHECK_SUCCESS': 'CHECK_SUCCESS',
   'OTP_SUCCESS': 'OTP_SUCCESS',
   'WAITING_FOR_OTP': 'WAITING_FOR_OTP',
   'COUNTDOWN_WAITING': 'COUNTDOWN_WAITING'
+};
+
+// 🔧 NETWORK DIAGNOSTIC UTILITIES
+export const NetworkDiagnostics = {
+  // Kiểm tra kết nối internet cơ bản
+  checkOnlineStatus: () => {
+    return navigator.onLine;
+  },
+  
+  // Ping test đơn giản
+  pingTest: async (url = 'https://www.google.com/favicon.ico') => {
+    try {
+      const start = Date.now();
+      const response = await fetch(url, { 
+        method: 'HEAD', 
+        cache: 'no-cache',
+        mode: 'no-cors'
+      });
+      const latency = Date.now() - start;
+      return { success: true, latency };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+  
+  // Phân tích lỗi network
+  analyzeNetworkError: (error) => {
+    if (!navigator.onLine) {
+      return 'NETWORK_OFFLINE';
+    }
+    
+    if (error.name === 'AbortError') {
+      return 'TIMEOUT_ERROR';
+    }
+    
+    if (error.message?.includes('Failed to fetch')) {
+      return 'NETWORK_ERROR';
+    }
+    
+    if (error.message?.includes('NetworkError')) {
+      return 'NETWORK_ERROR';
+    }
+    
+    if (error.message?.includes('timeout')) {
+      return 'TIMEOUT_ERROR';
+    }
+    
+    return 'SYSTEM_ERROR';
+  }
 };

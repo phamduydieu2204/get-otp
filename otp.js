@@ -162,39 +162,69 @@ async function fetchFinalOtp(email, software, otpSource) {
 
   let result;
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const otpStrategy = SmartRetryStrategies.createOtpStrategy(messageRenderer);
+    
+    result = await retryManager.executeWithRetry(async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // Tăng timeout lên 60s
 
-    const response = await fetch(BACKEND_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "getOtpFinal",
-        email,
-        software,
-        otpSource
-      }),
-      signal: controller.signal
+      const response = await fetch(BACKEND_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "getOtpFinal",
+          email,
+          software,
+          otpSource
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error(`Server overload: ${response.status}`);
+        }
+        if (response.status === 429) {
+          throw new Error(`Quota exceeded: ${response.status}`);
+        }
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      return await response.json();
+    }, {
+      ...otpStrategy,
+      errorAnalyzer: NetworkDiagnostics.analyzeNetworkError
     });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+    
+  } catch (retryError) {
+    console.error("Lỗi lấy OTP Final sau khi retry:", retryError);
+    
+    const errorCode = retryError.errorCode || NetworkDiagnostics.analyzeNetworkError(retryError.originalError);
+    globalRetryStats.recordFailure(errorCode);
+    
+    // Hiển thị lỗi chi tiết
+    switch (errorCode) {
+      case 'TIMEOUT_ERROR':
+        messageRenderer.render('TIMEOUT_ERROR');
+        break;
+      case 'NETWORK_ERROR':
+      case 'NETWORK_OFFLINE':
+        messageRenderer.render('NETWORK_ERROR');
+        break;
+      case 'SERVER_OVERLOAD':
+        messageRenderer.render('SERVER_OVERLOAD');
+        break;
+      case 'QUOTA_EXCEEDED':
+        messageRenderer.render('QUOTA_EXCEEDED');
+        break;
+      default:
+        messageRenderer.render('SYSTEM_ERROR', {
+          error: `Lỗi sau ${retryError.attempts} lần thử: ${retryError.originalError?.message || 'Unknown error'}`
+        });
     }
-
-    result = await response.json();
-  } catch (error) {
-    console.error("Lỗi lấy OTP:", error);
-    if (error.name === 'AbortError') {
-      messageRenderer.render('SYSTEM_ERROR', {
-        error: "Yêu cầu hết thời gian chờ. Vui lòng thử lại."
-      });
-    } else {
-      messageRenderer.render('SYSTEM_ERROR', {
-        error: "Server đang gặp sự cố. Vui lòng thử lại sau ít phút."
-      });
-    }
+    
     resetButton();
     return;
   }
@@ -209,4 +239,71 @@ async function fetchFinalOtp(email, software, otpSource) {
     messageRenderer.render(result.code || 'SYSTEM_ERROR', result.data);
   }
   resetButton();
+}
+
+// 🔍 Network Diagnostic Function
+async function runNetworkDiagnostic() {
+  if (isProcessing) {
+    console.log('🚫 Cannot run diagnostic while processing OTP request');
+    return;
+  }
+
+  console.log('🔍 Starting network diagnostic...');
+  
+  try {
+    // Disable button during diagnostic
+    const btn = document.getElementById("btnGetOtp");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "🔍 Chẩn đoán...";
+    }
+
+    // Run full diagnostic
+    const results = await networkDiagnostics.runFullDiagnostic(messageRenderer);
+    
+    // Generate and show report
+    const report = networkDiagnostics.generateUserReport();
+    const analysis = networkDiagnostics.analyzeResults();
+    
+    // Show results in a more user-friendly way
+    const statusMessages = {
+      good: 'Kết nối tốt, không có vấn đề phát hiện',
+      fair: 'Kết nối ổn định nhưng có vài vấn đề nhỏ',
+      poor: 'Phát hiện nhiều vấn đề với kết nối',
+      critical: 'Không có kết nối internet',
+      unknown: 'Không thể xác định tình trạng'
+    };
+
+    messageRenderer.render('SYSTEM_ERROR', {
+      error: `Chẩn đoán hoàn tất: ${statusMessages[analysis.overallHealth] || analysis.overallHealth}`
+    });
+
+    // Log detailed results for debugging
+    console.log('📊 Network Diagnostic Report:');
+    console.log(report);
+    console.log('📁 Raw Results:', results);
+    console.log('🎯 Analysis:', analysis);
+    
+    // Show popup with detailed info (optional)
+    if (analysis.overallHealth !== 'good') {
+      setTimeout(() => {
+        if (confirm('Muốn xem báo cáo chi tiết về tình trạng mạng?')) {
+          alert(report);
+        }
+      }, 2000);
+    }
+    
+  } catch (error) {
+    console.error('❗ Error running network diagnostic:', error);
+    messageRenderer.render('SYSTEM_ERROR', {
+      error: `Lỗi chẩn đoán: ${error.message}`
+    });
+  } finally {
+    // Re-enable button
+    const btn = document.getElementById("btnGetOtp");
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Lấy OTP";
+    }
+  }
 }
