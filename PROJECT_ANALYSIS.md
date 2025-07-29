@@ -207,6 +207,7 @@ API Call: getOtpCheck ──────> Heroku Proxy ──────> Backe
    - Request timeout protection
    - Subscription validation
    - Device limit enforcement
+   - Double-click prevention mechanism
 
 6. **Visual Design**
    - Modern card-based UI
@@ -307,6 +308,61 @@ API Call: getOtpCheck ──────> Heroku Proxy ──────> Backe
 
 ---
 
+## Double-Click Prevention Analysis
+
+### Cơ chế xử lý khi người dùng click 2 lần liên tiếp
+
+Hệ thống có **3 lớp bảo vệ** để ngăn chặn việc click nhiều lần:
+
+#### 1. **Biến trạng thái `isProcessing`**
+- **Vị trí**: Dòng 8, 41-46, 56, 65-66 trong `otp.js`
+- **Hoạt động**: 
+  - Khi bắt đầu xử lý: `isProcessing = true`
+  - Nếu đang xử lý và có click mới: Hiển thị thông báo "Đang xử lý yêu cầu trước đó. Vui lòng đợi..."
+  - Khi hoàn tất: `isProcessing = false`
+
+#### 2. **Rate Limiting với `lastRequestTime`**
+- **Vị trí**: Dòng 7, 39-54, 57 trong `otp.js`
+- **Hoạt động**:
+  - Lưu thời gian request cuối: `lastRequestTime = Date.now()`
+  - Kiểm tra khoảng cách giữa 2 lần click: `now - lastRequestTime < RATE_LIMIT_DELAY`
+  - Nếu < 5 giây: Hiển thị thông báo với số giây còn lại phải chờ
+  - Delay có thể cấu hình: `RATE_LIMIT_DELAY = 5000` (5 giây)
+
+#### 3. **Disable nút bấm**
+- **Vị trí**: Dòng 58-59, 66-67 trong `otp.js`
+- **Hoạt động**:
+  - Khi bắt đầu: `btn.disabled = true` và đổi text thành "⏳ Đang xử lý..."
+  - Khi hoàn tất: `btn.disabled = false` và đổi lại text "Lấy OTP"
+
+### Luồng xử lý chi tiết
+
+```
+Click lần 1:
+├─ Kiểm tra isProcessing (false) → Tiếp tục
+├─ Kiểm tra rate limit (OK) → Tiếp tục  
+├─ Set isProcessing = true
+├─ Set lastRequestTime = now
+├─ Disable button
+├─ Xử lý request...
+└─ Reset trạng thái khi xong
+
+Click lần 2 (ngay lập tức):
+├─ Kiểm tra isProcessing (true) → DỪNG
+└─ Hiển thị: "Đang xử lý yêu cầu trước đó..."
+
+Click lần 2 (sau khi xử lý xong nhưng < 5s):
+├─ Kiểm tra isProcessing (false) → Tiếp tục
+├─ Kiểm tra rate limit (FAIL) → DỪNG
+└─ Hiển thị: "Vui lòng đợi X giây trước khi thử lại"
+```
+
+### Ưu điểm của thiết kế này
+1. **Bảo vệ đa lớp**: 3 cơ chế độc lập đảm bảo không có request trùng lặp
+2. **UX tốt**: Người dùng được thông báo rõ ràng về trạng thái và thời gian chờ
+3. **Tránh lỗi backend**: Ngăn chặn việc gửi nhiều request cùng lúc
+4. **Linh hoạt**: Có thể điều chỉnh thời gian rate limit
+
 ## Maintenance Notes
 
 1. **Adding New Services**: Update `constants.js` SERVICES array
@@ -314,3 +370,4 @@ API Call: getOtpCheck ──────> Heroku Proxy ──────> Backe
 3. **Modifying Messages**: Edit templates in `messageTemplates.js`
 4. **Styling Changes**: All styles centralized in `style.css`
 5. **API Changes**: Update request format in `otp.js`
+6. **Adjusting Rate Limit**: Change `RATE_LIMIT_DELAY` value in `otp.js`
