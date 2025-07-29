@@ -8,6 +8,17 @@ let lastRequestTime = 0;
 let isProcessing = false;
 const RATE_LIMIT_DELAY = 5000; // 5 giây
 
+// Hàm helper để reset trạng thái nút
+function resetButton() {
+  const btn = document.getElementById("btnGetOtp");
+  if (btn) {
+    isProcessing = false;
+    btn.disabled = false;
+    btn.textContent = "Lấy OTP";
+    btn.classList.remove('processing');
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const { SERVICES } = getConstants();
   const softwareSelect = document.getElementById("softwareName");
@@ -36,12 +47,19 @@ document.getElementById("btnGetOtp").addEventListener("click", async () => {
   const output = document.getElementById("otpResult");
   const btn = document.getElementById("btnGetOtp");
 
+  // Vô hiệu hóa nút ngay lập tức
+  btn.disabled = true;
+  btn.textContent = "⏳ Đang xử lý...";
+  btn.classList.add('processing');
+
   // Rate limiting check
   const now = Date.now();
   if (isProcessing) {
     messageRenderer.render('SYSTEM_ERROR', {
       error: "Đang xử lý yêu cầu trước đó. Vui lòng đợi..."
     });
+    // Reset nút nếu đang xử lý
+    resetButton();
     return;
   }
 
@@ -50,21 +68,19 @@ document.getElementById("btnGetOtp").addEventListener("click", async () => {
     messageRenderer.render('SYSTEM_ERROR', {
       error: `Vui lòng đợi ${remainingTime} giây trước khi thử lại`
     });
+    // Reset nút nếu rate limited
+    resetButton();
     return;
   }
 
   isProcessing = true;
   lastRequestTime = now;
-  btn.disabled = true;
-  btn.textContent = "⏳ Đang xử lý...";
   messageRenderer.render('WAITING_FOR_OTP');
 
 
   if (!email) {
     alert("Vui lòng nhập email của bạn!");
-    isProcessing = false;
-    btn.disabled = false;
-    btn.textContent = "Lấy OTP";
+    resetButton();
     return;
   }
 
@@ -106,17 +122,13 @@ document.getElementById("btnGetOtp").addEventListener("click", async () => {
         error: "Không thể kết nối tới server. Vui lòng thử lại sau."
       });
     }
-    isProcessing = false;
-    btn.disabled = false;
-    btn.textContent = "Lấy OTP";
+    resetButton();
     return;
   }
 
   if (checkResult.status === "error") {
     messageRenderer.render(checkResult.code || 'SYSTEM_ERROR', checkResult.data);
-    isProcessing = false;
-    btn.disabled = false;
-    btn.textContent = "Lấy OTP";
+    resetButton();
     return;
   }
 
@@ -183,9 +195,7 @@ async function fetchFinalOtp(email, software, otpSource) {
         error: "Server đang gặp sự cố. Vui lòng thử lại sau ít phút."
       });
     }
-    isProcessing = false;
-    btn.disabled = false;
-    btn.textContent = "Lấy OTP";
+    resetButton();
     return;
   }
 
@@ -198,7 +208,5 @@ async function fetchFinalOtp(email, software, otpSource) {
   } else {
     messageRenderer.render(result.code || 'SYSTEM_ERROR', result.data);
   }
-  isProcessing = false;
-  btn.disabled = false;
-  btn.textContent = "Lấy OTP";
+  resetButton();
 }
