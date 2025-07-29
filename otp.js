@@ -132,8 +132,8 @@ document.getElementById("btnGetOtp").addEventListener("click", async () => {
     return;
   }
 
-const now = Date.now();
-const msUntilNextOtp = 30000 - (now % 30000);
+const currentTime = Date.now();
+const msUntilNextOtp = 30000 - (currentTime % 30000);
 const secondsLeft = Math.ceil(msUntilNextOtp / 1000);
 
 if (secondsLeft < 20) {
